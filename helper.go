@@ -126,9 +126,9 @@ func streamConvertAudio(inputURL, outputFile string) error {
 	cmd := exec.Command("ffmpeg", "-y",
 		"-t", "600",
 		"-i", inputURL,
-		"-threads", "0",
+		"-threads", "2",
 		"-ac", "1", "-ar", "24000", "-b:a", "32k", "-q:a", "9",
-		"-bufsize", "64k",
+		"-bufsize", "32k",
 		tempFile)
 
 	err := cmd.Run()
@@ -162,9 +162,12 @@ func streamConvertToWriter(inputURL string, w http.ResponseWriter) error {
 	fmt.Printf("[Info] Live streaming from URL: %s\n", inputURL)
 
 	// ffmpeg 边下载边转码，输出到 stdout
+	// -threads 2: 限制CPU使用，避免100% CPU占用（0会使用所有核心）
+	// -preset fast: 快速转码，节省CPU资源
 	cmd := exec.Command("ffmpeg",
 		"-i", inputURL,
-		"-threads", "0",
+		"-threads", "2",
+		"-preset", "fast",
 		"-ac", "1", "-ar", "24000", "-b:a", "32k", "-q:a", "9",
 		"-f", "mp3",
 		"-map_metadata", "-1",
@@ -186,13 +189,14 @@ func streamConvertToWriter(inputURL string, w http.ResponseWriter) error {
 	// 移除 Transfer-Encoding: chunked，让 Go 自动处理
 
 	// 边读边写到 HTTP response
-	buf := make([]byte, 8192)
+	// 使用较小的缓冲区减少内存使用
+	buf := make([]byte, 4096)
 	for {
 		n, err := stdout.Read(buf)
 		if n > 0 {
 			w.Write(buf[:n])
 			if f, ok := w.(http.Flusher); ok {
-				f.Flush() // 立即发送给客户端
+				f.Flush() // 立即发送给客户端，避免内存堆积
 			}
 		}
 		if err != nil {

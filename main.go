@@ -111,7 +111,12 @@ func main() {
 	go func() {
 		for {
 			var input string
-			fmt.Scanln(&input)
+			_, err := fmt.Scanln(&input)
+			if err != nil {
+				// 读取失败时（如后台运行或无stdin），休眠避免CPU空转
+				time.Sleep(1 * time.Second)
+				continue
+			}
 			if input == "exit" {
 				exitChan <- struct{}{}
 				return

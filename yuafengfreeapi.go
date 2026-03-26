@@ -388,31 +388,56 @@ func getRemoteMusicURLOnly(song, singer string) string {
 	for _, host := range apiHosts {
 		for _, source := range sources {
 			path := pathMap[source]
-			apiURL := fmt.Sprintf("%s%s?msg=%s-%s&n=1", host, path, url.QueryEscape(song), url.QueryEscape(singer))
+			apiURL := fmt.Sprintf("%s%s?msg=%s&n=1", host, path, url.QueryEscape(song))
+			if singer != "" {
+				apiURL = fmt.Sprintf("%s%s?msg=%s-%s&n=1", host, path, url.QueryEscape(song), url.QueryEscape(singer))
+			}
+			
+			fmt.Printf("[Info] Trying API: %s\n", apiURL)
 
 			resp, err := client.Get(apiURL)
 			if err != nil {
+				fmt.Printf("[Warning] API request failed: %v\n", err)
 				continue
 			}
-			defer resp.Body.Close()
-
+			
 			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			
 			if err != nil {
+				fmt.Printf("[Warning] Failed to read response: %v\n", err)
+				continue
+			}
+			
+			// 检查是否是HTML错误页面
+			if len(body) > 0 && body[0] == '<' {
+				fmt.Printf("[Warning] API returned HTML instead of JSON (likely blocked or error page)\n")
 				continue
 			}
 
 			var response YuafengAPIFreeResponse
 			if err := json.Unmarshal(body, &response); err != nil {
+				fmt.Printf("[Warning] Failed to parse JSON: %v, body: %s\n", err, string(body[:min(len(body), 200)]))
 				continue
 			}
 
 			if response.Data.Music != "" {
 				fmt.Printf("[Success] Got remote URL from %s: %s\n", source, response.Data.Music)
 				return response.Data.Music
+			} else {
+				fmt.Printf("[Warning] API %s returned empty music URL\n", source)
 			}
 		}
 	}
 
 	fmt.Println("[Error] Failed to get remote music URL from all APIs")
 	return ""
+}
+
+// min 返回两个整数中较小的一个
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

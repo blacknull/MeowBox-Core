@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -117,10 +118,33 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	fullPath := filepath.Join("./files", filePath)
 	fileContent, err := GetFileContent(fullPath)
 
-	// 特殊处理空music.mp3
+	// 特殊处理music.mp3文件不存在或为空的情况
 	isEmptyMusic := (err == nil && len(fileContent) == 0 && strings.HasSuffix(filePath, "/music.mp3"))
 	if err != nil || isEmptyMusic {
-		// 没有/空的music.mp3文件，直接返回404
+		// 检查是否是music.mp3请求，尝试实时流式转码
+		if strings.HasSuffix(filePath, "/music.mp3") {
+			// 尝试读取remote_url.txt获取原始音频URL
+			dir := filepath.Dir(fullPath)
+			remoteURLFile := filepath.Join(dir, "remote_url.txt")
+			
+			remoteURLBytes, err := os.ReadFile(remoteURLFile)
+			if err == nil && len(remoteURLBytes) > 0 {
+				remoteURL := string(remoteURLBytes)
+				fmt.Printf("[Info] Music file not ready, starting live stream conversion for: %s\n", remoteURL)
+				
+				// 实时流式转码到HTTP response
+				err = streamConvertToWriter(remoteURL, w)
+				if err != nil {
+					fmt.Printf("[Error] Live stream conversion failed: %v\n", err)
+					NotFoundHandler(w, r)
+				}
+				return
+			}
+			
+			fmt.Printf("[Warning] No remote_url.txt found for: %s\n", fullPath)
+		}
+		
+		// 其他情况返回404
 		NotFoundHandler(w, r)
 		return
 	}

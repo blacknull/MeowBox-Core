@@ -164,22 +164,18 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If still not found, request and cache the music item in a separate goroutine
-	// 直接进行流式播放
+	// If still not found, request and cache the music item
+	// 使用同步转码，等待文件准备好再返回
 	if !found {
-		encodedSong := url.QueryEscape(song)
-		encodedSinger := url.QueryEscape(singer)
-		streamURL := scheme + "://" + r.Host + "/stream_live?song=" + encodedSong + "&singer=" + encodedSinger
-		fmt.Println("[Info] Updating music item cache from API request.")
-		musicItem = requestAndCacheMusic(song, singer)
-		fmt.Println("[Info] Music item cache updated.")
-		musicItem.FromCache = false
-		musicItem.AudioURL = streamURL
-		musicItem.AudioFullURL = streamURL
-		musicItem.M3U8URL = scheme + "://" + r.Host + musicItem.M3U8URL
-		musicItem.LyricURL = scheme + "://" + r.Host + musicItem.LyricURL
-		musicItem.CoverURL = scheme + "://" + r.Host + musicItem.CoverURL
-		found = true
+		fmt.Println("[Info] Music not in cache, fetching and converting...")
+		musicItem = requestAndCacheMusicSync(song, singer, scheme, r.Host)
+		if musicItem.Title != "" {
+			musicItem.IP = ip
+			encoder := json.NewEncoder(w)
+			encoder.SetEscapeHTML(false)
+			encoder.Encode(musicItem)
+			return
+		}
 	}
 
 	// If still not found, return an empty MusicItem
@@ -199,9 +195,8 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 
 // streamLiveHandler 实时流式转码接口 - 边下载边播放，无需等待！
 func streamLiveHandler(w http.ResponseWriter, r *http.Request) {
-	// 设置 CORS 和音频相关头
+	// 设置 CORS 头
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Accept-Ranges", "bytes")
 
 	queryParams := r.URL.Query()
 	song := queryParams.Get("song")
@@ -231,15 +226,17 @@ func streamLiveHandler(w http.ResponseWriter, r *http.Request) {
 	// 调用枫雨API获取远程音乐URL（不下载，只获取URL）
 	remoteURL := getRemoteMusicURLOnly(song, singer)
 	if remoteURL == "" {
+		fmt.Printf("[Stream Live] Error: Failed to get remote music URL\n")
 		http.Error(w, "Failed to get remote music URL", http.StatusNotFound)
 		return
 	}
 
 	fmt.Printf("[Stream Live] Starting live stream from: %s\n", remoteURL)
 
-	// 4. 实时流式转码
+	// 3. 实时流式转码
 	if err := streamConvertToWriter(remoteURL, w); err != nil {
 		fmt.Printf("[Stream Live] Error: %v\n", err)
-		// 错误可能已经发送了部分数据，无法再发送错误响应
+		// 如果还没有写入任何数据，返回错误
+		// 如果已经写入部分数据，只能关闭连接
 	}
 }
