@@ -138,6 +138,72 @@ After starting the server:
 
 ---
 
+## Code Organization and Module Divisions
+
+### Core Modules
+
+1. **main.go** - HTTP server setup and route registration
+   - Initializes UserStore, PlaylistManager, DeviceManager
+   - Registers all HTTP handlers
+   - Handles graceful shutdown
+
+2. **user.go** - User authentication system
+   - `UserStore` singleton with mutex-protected access
+   - Password hashing with bcrypt
+   - Session token generation and validation
+   - Support for multiple auth methods (Bearer, Cookie, X-Device-Token)
+
+3. **playlist.go** - Playlist management
+   - Legacy playlist support (backward compatible)
+   - User-specific playlist system
+   - "我喜欢" (Favorites) playlist auto-creation
+   - CRUD operations for playlists and songs
+
+4. **device.go** - ESP32 device management
+   - `DeviceManager` singleton
+   - 6-digit binding code generation (5-minute expiry)
+   - Device token verification
+   - MAC address-based device tracking
+
+5. **api.go** - Music streaming endpoints
+   - `/stream_pcm` - JSON metadata API
+   - `/stream_live` - Real-time audio streaming with transcoding
+
+6. **search.go** - Music search
+   - Multi-source search (local, API)
+   - Source priority: Kuwo > NetEase > Migu > Baidu
+
+7. **yuafengfreeapi.go** - External API integration
+   - 枫雨API (Yuafeng API) integration
+   - Multiple API host fallback
+   - Async background processing for downloads
+   - Lyrics fetching from backup sources
+
+8. **helper.go** - Utility functions
+   - FFmpeg transcoding functions
+   - File download utilities
+   - Cache management
+   - Duration detection with FFprobe
+
+9. **file.go** - File serving
+   - Static file handler
+   - Remote URL proxying (`/url/` prefix)
+   - Live stream transcoding when files not ready
+   - Content-Type detection
+
+10. **index.go** - Web interface
+    - Route-based page serving
+    - Default HTML page generation
+    - Internationalization support (Chinese/English)
+
+11. **struct.go** - Data structures
+    - `MusicItem` - Music metadata
+    - `User` - User account
+    - `UserPlaylist` - User playlist
+    - `LoginRequest`/`RegisterRequest` - Auth requests
+
+---
+
 ## API Endpoints
 
 ### Music Streaming
@@ -254,7 +320,7 @@ This project currently does not have automated unit tests. All testing is manual
 
 ---
 
-## Deployment
+## Configuration
 
 ### Environment Variables (Optional .env file)
 ```env
@@ -263,6 +329,26 @@ WEBSITE_NAME_CN=我的音乐服务器
 WEBSITE_NAME_EN=My Music Server
 WEBSITE_URL=http://localhost:2233
 ```
+
+### sources.json Format
+```json
+[
+    {
+        "title": "Song Name",
+        "artist": "Artist Name",
+        "audio_url": "https://example.com/audio.mp3",
+        "audio_full_url": "https://example.com/audio_full.mp3",
+        "m3u8_url": "",
+        "lyric_url": "https://example.com/lyric.lrc",
+        "cover_url": "https://example.com/cover.jpg",
+        "duration": 180
+    }
+]
+```
+
+---
+
+## Deployment
 
 ### Linux systemd Service
 Create `/etc/systemd/system/meow-music.service`:

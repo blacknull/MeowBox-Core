@@ -222,9 +222,23 @@ parseSuccess:
 			if err != nil {
 				fmt.Println("[Async Error] Error stream converting audio:", err)
 				// 备用方案
-				err = downloadFile(filepath.Join(dirName, "music_full"+musicExt), response.Data.Music)
+				fullMp3 := filepath.Join(dirName, "music_full"+musicExt)
+				err = downloadFile(fullMp3, response.Data.Music)
 				if err == nil {
-					compressAndSegmentAudio(filepath.Join(dirName, "music_full"+musicExt), dirName)
+					err = compressAndSegmentAudio(fullMp3, dirName)
+					if err != nil {
+						fmt.Println("[Async Error] Error compressing audio:", err)
+						// 压缩失败，直接使用原始文件作为 music.mp3
+						os.Remove(outputMp3) // 删除可能损坏的空文件
+						err = os.Rename(fullMp3, outputMp3)
+						if err != nil {
+							fmt.Println("[Async Error] Failed to rename full music file:", err)
+						} else {
+							fmt.Printf("[Async] Using full quality audio as fallback: %s\n", outputMp3)
+						}
+					}
+				} else {
+					fmt.Println("[Async Error] Error downloading full audio:", err)
 				}
 			}
 		}()

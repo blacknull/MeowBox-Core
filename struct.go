@@ -12,6 +12,7 @@ type MusicItem struct {
 	LyricURL     string `json:"lyric_url"`
 	CoverURL     string `json:"cover_url"`
 	Duration     int    `json:"duration"`
+	DataSize     int64  `json:"data_size"` // 音频文件大小（字节）
 	FromCache    bool   `json:"from_cache"`
 	IP           string `json:"ip"`
 }

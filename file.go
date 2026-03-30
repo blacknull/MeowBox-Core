@@ -115,6 +115,7 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 统一使用解码后路径
+	// 注意：/cache/ 路径映射到 ./files/cache/ 目录（yuafengfreeapi.go 在此存储缓存文件）
 	fullPath := filepath.Join("./files", filePath)
 	fileContent, err := GetFileContent(fullPath)
 

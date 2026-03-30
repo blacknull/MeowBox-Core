@@ -171,6 +171,8 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		musicItem = requestAndCacheMusicSync(song, singer, scheme, r.Host)
 		if musicItem.Title != "" {
 			musicItem.IP = ip
+			// 获取文件大小
+			musicItem.DataSize = GetMusicFileSize(song, singer)
 			encoder := json.NewEncoder(w)
 			encoder.SetEscapeHTML(false)
 			encoder.Encode(musicItem)
@@ -186,6 +188,8 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		musicItem.IP = ip
+		// 获取文件大小
+		musicItem.DataSize = GetMusicFileSize(musicItem.Title, musicItem.Artist)
 	}
 
 	encoder := json.NewEncoder(w)

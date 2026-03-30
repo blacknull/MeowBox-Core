@@ -112,6 +112,33 @@ func requestAndCacheMusic(song, singer string) MusicItem {
 	return MusicItem{}
 }
 
+// 同步请求并缓存音乐，等待文件准备好后返回完整URL
+func requestAndCacheMusicSync(song, singer, scheme, host string) MusicItem {
+	item := requestAndCacheMusic(song, singer)
+	if item.Title == "" {
+		return MusicItem{}
+	}
+
+	// 构建完整URL
+	if item.AudioURL != "" && !strings.HasPrefix(item.AudioURL, "http") {
+		item.AudioURL = scheme + "://" + host + item.AudioURL
+	}
+	if item.AudioFullURL != "" && !strings.HasPrefix(item.AudioFullURL, "http") {
+		item.AudioFullURL = scheme + "://" + host + item.AudioFullURL
+	}
+	if item.M3U8URL != "" && !strings.HasPrefix(item.M3U8URL, "http") {
+		item.M3U8URL = scheme + "://" + host + item.M3U8URL
+	}
+	if item.LyricURL != "" && !strings.HasPrefix(item.LyricURL, "http") {
+		item.LyricURL = scheme + "://" + host + item.LyricURL
+	}
+	if item.CoverURL != "" && !strings.HasPrefix(item.CoverURL, "http") {
+		item.CoverURL = scheme + "://" + host + item.CoverURL
+	}
+
+	return item
+}
+
 // 直接从远程URL流式转码（边下载边转码，超快！）
 func streamConvertAudio(inputURL, outputFile string) error {
 	fmt.Printf("[Info] Stream converting from URL (fast mode)\n")
@@ -288,66 +315,76 @@ func compressAndSegmentAudio(inputFile, outputDir string) error {
 	return nil
 }
 
+// GetMusicFileSize 获取缓存音乐文件的大小（字节）
+func GetMusicFileSize(song, singer string) int64 {
+	// 构建缓存文件路径
+	cacheDir := fmt.Sprintf("./files/cache/music/%s-%s", singer, song)
+	musicFile := filepath.Join(cacheDir, "music.mp3")
+
+	// 检查文件是否存在并获取大小
+	fileInfo, err := os.Stat(musicFile)
+	if err != nil {
+		// 尝试从本地音乐目录查找
+		localDir := fmt.Sprintf("./files/music/%s-%s", singer, song)
+		musicFile = filepath.Join(localDir, "music.mp3")
+		fileInfo, err = os.Stat(musicFile)
+		if err != nil {
+			return 0
+		}
+	}
+	return fileInfo.Size()
+}
+
 // Helper function to obtain music data from local folder
 func getLocalMusicItem(song, singer string) MusicItem {
-	musicDir := "./files/music"
+	musicDirs := []string{"./files/music", "./files/cache/music"}
 	fmt.Println("[Info] Reading local folder music.")
-	files, err := os.ReadDir(musicDir)
-	if err != nil {
-		fmt.Println("[Error] Failed to read local music directory:", err)
-		return MusicItem{}
-	}
 
-	for _, file := range files {
-		if file.IsDir() {
+	for _, musicDir := range musicDirs {
+		files, err := os.ReadDir(musicDir)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			if !file.IsDir() {
+				continue
+			}
+			name := file.Name()
 			if singer == "" {
-				if strings.Contains(file.Name(), song) {
-					dirPath := filepath.Join(musicDir, file.Name())
-					// Extract artist and title from the directory name
-					parts := strings.SplitN(file.Name(), "-", 2)
-					var artist, title string
-					if len(parts) == 2 {
-						artist = parts[0]
-						title = parts[1]
-					} else {
-						title = file.Name()
-					}
-					basePath := "/cache/music/" + url.QueryEscape(file.Name())
-					return MusicItem{
-						Title:        title,
-						Artist:       artist,
-						CoverURL:     basePath + "/cover.jpg",
-						LyricURL:     basePath + "/lyric.lrc",
-						AudioFullURL: basePath + "/music.mp3",
-						AudioURL:     basePath + "/music.mp3",
-						M3U8URL:      basePath + "/music.m3u8",
-						Duration:     GetDuration(filepath.Join(dirPath, "music.mp3")),
-					}
+				if !strings.Contains(name, song) {
+					continue
 				}
 			} else {
-				if strings.Contains(file.Name(), song) && strings.Contains(file.Name(), singer) {
-					dirPath := filepath.Join(musicDir, file.Name())
-					// Extract artist and title from the directory name
-					parts := strings.SplitN(file.Name(), "-", 2)
-					var artist, title string
-					if len(parts) == 2 {
-						artist = parts[0]
-						title = parts[1]
-					} else {
-						title = file.Name()
-					}
-					basePath := "/cache/music/" + url.QueryEscape(file.Name())
-					return MusicItem{
-						Title:        title,
-						Artist:       artist,
-						CoverURL:     basePath + "/cover.jpg",
-						LyricURL:     basePath + "/lyric.lrc",
-						AudioFullURL: basePath + "/music.mp3",
-						AudioURL:     basePath + "/music.mp3",
-						M3U8URL:      basePath + "/music.m3u8",
-						Duration:     GetDuration(filepath.Join(dirPath, "music.mp3")),
-					}
+				if !strings.Contains(name, song) || !strings.Contains(name, singer) {
+					continue
 				}
+			}
+
+			dirPath := filepath.Join(musicDir, name)
+			musicPath := filepath.Join(dirPath, "music.mp3")
+			info, err := os.Stat(musicPath)
+			if err != nil || info.Size() == 0 {
+				continue
+			}
+			parts := strings.SplitN(name, "-", 2)
+			var artist, title string
+			if len(parts) == 2 {
+				artist = parts[0]
+				title = parts[1]
+			} else {
+				title = name
+			}
+			basePath := "/cache/music/" + url.QueryEscape(name)
+			return MusicItem{
+				Title:        title,
+				Artist:       artist,
+				CoverURL:     basePath + "/cover.jpg",
+				LyricURL:     basePath + "/lyric.lrc",
+				AudioFullURL: basePath + "/music.mp3",
+				AudioURL:     basePath + "/music.mp3",
+				M3U8URL:      basePath + "/music.m3u8",
+				Duration:     GetDuration(musicPath),
 			}
 		}
 	}
